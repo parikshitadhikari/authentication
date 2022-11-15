@@ -29,7 +29,8 @@ mongoose.connect("mongodb://localhost:27017/userDB");
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -61,8 +62,8 @@ passport.use(new GoogleStrategy({
     callbackURL: "http://localhost:3000/auth/google/secrets", //redirected url
     userProfileURL:"https://www.googleapis.com/oauth2/v3/userinfo"
   },
-  function(accessToken, refreshToken, profile, cb) {
-    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+  function(accessToken, refreshToken, profile, cb){
+    User.findOrCreate({ googleId: profile.id },function (err, user){
       return cb(err, user);
     });
   }
@@ -79,7 +80,7 @@ app.get("/auth/google",
 
 app.get("/auth/google/secrets",
     passport.authenticate("google",{failureRedirect:"/login"}),
-    function(req,res){
+    (req,res)=>{
         res.redirect("/secrets");
     }
 )
@@ -92,16 +93,45 @@ app.get("/register",(req,res)=>{
     res.render("register");
 })
 
-app.get("/secrets",function(req,res){
+app.get("/secrets",(req,res)=>{
+    User.find({"secret":{$ne:null}},(err,foundUsers)=>{
+        if (err) {
+            console.log(err);
+        } else {
+            if(foundUsers){
+                res.render("secrets",{usersWithSecrets:foundUsers});
+            }
+        }
+    })
+})
+
+app.get("/submit",(req,res)=>{
     if(req.isAuthenticated()){
-        res.render("secrets");
+        res.render("submit");
     }else{
         res.redirect("/login");
     }
 })
 
+app.post("/submit",(req,res)=>{
+    const submittedSecret = req.body.secret;
+    console.log(req.user);
+    User.findById(req.user.id,(err,foundUser)=>{
+        if (err) {
+            console.log(err);
+        } else {
+            if(foundUser){
+                foundUser.secret = submittedSecret;
+                foundUser.save(()=>{
+                    res.redirect("/secrets");
+                })
+            }
+        }
+    })
+})
+
 app.get("/logout",(req,res)=>{
-    req.logout(function(err){
+    req.logout((err)=>{
         if (err) {
             console.log(err);
         } else {
@@ -111,12 +141,12 @@ app.get("/logout",(req,res)=>{
 })
 
 app.post("/register",(req,res)=>{
-    User.register({username:req.body.username},req.body.password,function(err,user){
+    User.register({username:req.body.username},req.body.password,(err,user)=>{
         if (err) {
             console.log(err);
             res.redirect("/register");
         } else {
-            passport.authenticate("local")(req,res,function(){
+            passport.authenticate("local")(req,res,()=>{
                 res.redirect("/secrets");
             })
         }
@@ -132,7 +162,7 @@ app.post("/login",(req,res)=>{
         if (err) {
             console.log(err);
         } else {
-            passport.authenticate("local")(req,res,function(){
+            passport.authenticate("local")(req,res,()=>{
                 res.redirect("/secrets");
         })
     }
